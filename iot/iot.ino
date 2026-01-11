@@ -1,52 +1,85 @@
+#include <WiFi.h>
+#include <HTTPClient.h>
 #include <math.h>
 
 // Pins
-const int dustPin = A0;
-const int mq7Pin = A1;
-const int mq135Pin = A2;
-const int dustLed = 7;
+const int dustPin = 34;
+const int mq7Pin = 35;
+const int mq135Pin = 32;
+const int dustLed = 27;
 
-// Calibration Constants
-float dustOffset = 0.065; 
-const float RLOAD = 10.0; 
-const float R0 = 35.0; // Adjust this after 24h burn-in
+// Calibration
+float dustOffset = 0.065;
+const float RLOAD = 10.0;
+const float R0 = 35.0;
+
+// WiFi
+const char* ssid = "YOUR_WIFI_NAME";
+const char* password = "YOUR_WIFI_PASSWORD";
+const char* serverURL = "http://192.168.1.100:8000/sensor-data";
 
 void setup() {
   Serial.begin(9600);
   pinMode(dustLed, OUTPUT);
-  digitalWrite(dustLed, HIGH); // LED Off
-  Serial.println("System Warming Up... (Allow 2 mins)");
+  digitalWrite(dustLed, HIGH);
+
+  WiFi.begin(ssid, password);
+  Serial.print("Connecting to WiFi");
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println("\nWiFi connected!");
 }
 
 void loop() {
-  // --- PM2.5 (Dust) ---
+
+  // ---- PM2.5 ----
   digitalWrite(dustLed, LOW);
   delayMicroseconds(280);
-  float dustV = analogRead(dustPin) * (5.0 / 1024.0);
+  float dustV = analogRead(dustPin) * (3.3 / 4095.0);
   delayMicroseconds(40);
   digitalWrite(dustLed, HIGH);
-  float pm25ppm = ((dustV - dustOffset) * 200.0) / 1225.0;
-  if (pm25ppm < 0) pm25ppm = 0;
 
-  // --- MQ-7 (CO) ---
-  float coV = analogRead(mq7Pin) * (5.0 / 1024.0);
-  float coPPM = (coV - 0.15) * 100.0; // Basic estimate
-  if (coPPM < 0) coPPM = 0;
+  float pm25 = ((dustV - dustOffset) * 200.0) / 1225.0;
+  if (pm25 < 0) pm25 = 0;
 
-  // --- MQ-135 (NH3 & NO2) ---
-  float mq135V = analogRead(mq135Pin) * (5.0 / 1024.0);
-  float rs = ((5.0 * RLOAD) / mq135V) - RLOAD;
+  // ---- CO ----
+  float coV = analogRead(mq7Pin) * (3.3 / 4095.0);
+  float co = (coV - 0.15) * 100.0;
+  if (co < 0) co = 0;
+
+  // ---- MQ135 ----
+  float mq135V = analogRead(mq135Pin) * (3.3 / 4095.0);
+  float rs = ((3.3 * RLOAD) / mq135V) - RLOAD;
   float ratio = rs / R0;
 
-  // Power Law Formulas from Datasheet
-  float ppmNH3 = 102.2 * pow(ratio, -2.47);
-  float ppmNO2 = 44.2 * pow(ratio, -2.89);
+  float nh3 = 102.2 * pow(ratio, -2.47);
+  float no2 = 44.2 * pow(ratio, -2.89);
 
-  // --- Output ---
-  Serial.print("D-PPM: "); Serial.print(pm25ppm, 4);
-  Serial.print(" | CO: "); Serial.print(coPPM, 1);
-  Serial.print(" | NH3: "); Serial.print(ppmNH3, 2);
-  Serial.print(" | NO2: "); Serial.println(ppmNO2, 2);
+  // ---- JSON Payload ----
+  String payload = "{";
+  payload += "\"pm25\":" + String(pm25, 2) + ",";
+  payload += "\"co\":" + String(co, 2) + ",";
+  payload += "\"nh3\":" + String(nh3, 2) + ",";
+  payload += "\"no2\":" + String(no2, 2);
+  payload += "}";
 
-  delay(3000); 
+  // ---- HTTP POST ----
+  if (WiFi.status() == WL_CONNECTED) {
+    HTTPClient http;
+    http.begin(serverURL);
+    http.addHeader("Content-Type", "application/json");
+
+    int httpResponseCode = http.POST(payload);
+
+    Serial.print("HTTP Response: ");
+    Serial.println(httpResponseCode);
+
+    http.end();
+  }
+
+  delay(4000);
 }
