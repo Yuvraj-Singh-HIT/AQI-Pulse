@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AQI Pulse</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.9.1/gsap.min.js"></script>
+    <style>
+        :root {
+            --primary: #4361ee;
+            --secondary: #3a0ca3;
+            --accent: #4cc9f0;
+            --dark: #1a1a2e;
+            --light: #f8f9fa;
+            --success: #4caf50;
+            --warning: #ff9800;
+            --danger: #f44336;
+            --severe: #9c27b0;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family:Georgia, 'Times New Roman', Times, serif;
+            color: var(--light);
+            overflow-x: hidden;
+            background: #000;
+        }
+
+        #canvas-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+            position: relative;
+            z-index: 1;
+        }
+
+        header {
+            text-align: center;
+            padding: 4rem 0 2rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        h1 {
+            font-size: 3.5rem;
+            margin-bottom: 1rem;
+            background: linear-gradient(90deg, #fff, #4cc9f0);
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            color: transparent;
+            text-shadow: 0 0 20px rgba(76, 201, 240, 0.3);
+            position: relative;
+            display: inline-block;
+        }
+
+        h1::after {
+            content: '';
+            position: absolute;
+            bottom: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100px;
+            height: 4px;
+            background: var(--accent);
+            border-radius: 2px;
+        }
+
+        .subtitle {
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 1.2rem;
+            max-width: 700px;
+            margin: 0 auto 2rem;
+            line-height: 1.6;
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+            perspective: 1000px;
+        }
+
+        .card {
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 2rem;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            transition: all 0.3s ease;
+            border: 1px solid rgba(127, 255, 0, 0.2);
+            transform-style: preserve-3d;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(127, 255, 0, 0.1) 0%, transparent 70%);
+            transform: rotate(30deg);
+            transition: 0.5s;
+            pointer-events: none;
+        }
+
+        .card:hover {
+            transform: translateY(-10px) rotateX(5deg) rotateY(5deg);
+            box-shadow: 0 20px 40px rgba(127, 255, 0, 0.2);
+            border-color: rgba(127, 255, 0, 0.4);
+        }
+
+        .card:hover::before {
+            transform: rotate(0);
+        }
+
+        .card h2 {
+            font-size: 1.5rem;
+            margin-bottom: 1.5rem;
+            color: #7fff00;
+            position: relative;
+            display: inline-block;
+        }
+
+        .card h2::after {
+            content: '';
+            position: absolute;
+            bottom: -8px;
+            left: 0;
+            width: 50px;
+            height: 3px;
+            background: #7fff00;
+            border-radius: 2px;
+        }
+
+        .data-item {
+            margin-bottom: 1.5rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .data-item:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .data-label {
+            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.7);
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+        }
+
+        .data-value {
+            font-size: 1.8rem;
+            font-weight: 600;
+            margin: 0.5rem 0;
+            display: flex;
+            align-items: center;
+        }
+
+        .aqi-category {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.5rem 1rem;
+            border-radius: 50px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            margin-top: 0.5rem;
+            transition: all 0.3s ease;
+            transform: translateZ(20px);
+        }
+
+        .good { background-color: var(--success); }
+        .moderate { background-color: var(--warning); color: #000; }
+        .poor { background-color: #ff6b35; }
+        .very-poor { background-color: var(--danger); }
+        .severe { background-color: var(--severe); }
+
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            font-size: 1.2rem;
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .error {
+            background: rgba(244, 67, 54, 0.2);
+            border-left: 4px solid var(--danger);
+            padding: 1rem;
+            border-radius: 4px;
+            margin: 1rem 0;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem;
+            }
+            
+            h1 {
+                font-size: 2.5rem;
+            }
+            
+            .dashboard {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Animation classes */
+        .fade-in {
+            animation: fadeIn 0.8s ease-out forwards;
+            opacity: 0;
+        }
+
+        @keyframes fadeIn {
+            to { opacity: 1; }
+        }
+
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+    
+    <div class="container">
+        <header>
+            <h1 class="fade-in">AQI Pulse</h1>
+            <p class="subtitle">Real-Time Air Quality Intelligence for a Healthier World</p>
+        </header>
+
+        <div id="forecast-data" class="dashboard">
+            <div class="loading">
+                <div class="loader">Loading air quality data...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize Three.js scene with green wave animation
+        function initThreeJS() {
+            const container = document.getElementById('canvas-container');
+            const scene = new THREE.Scene();
+            scene.fog = new THREE.Fog(0x000000, 1, 15);
+            
+            const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 5;
+            camera.position.y = 2;
+            camera.rotation.x = -0.3;
+            
+            const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setClearColor(0x000000, 1);
+            container.appendChild(renderer.domElement);
+
+            // Create the main wave geometry
+            const waveGeometry = new THREE.PlaneGeometry(20, 20, 128, 128);
+            
+            // Wave material with green glow
+            const waveMaterial = new THREE.ShaderMaterial({
+                uniforms: {
+                    time: { value: 0 },
+                    color1: { value: new THREE.Color(0x001100) },
+                    color2: { value: new THREE.Color(0x7fff00) }
+                },
+                vertexShader: `
+                    uniform float time;
+                    varying vec3 vPosition;
+                    varying float vElevation;
+                    
+                    void main() {
+                        vPosition = position;
+                        
+                        vec3 pos = position;
+                        
+                        // Create multiple wave patterns
+                        float wave1 = sin(pos.x * 0.5 + time * 2.0) * cos(pos.y * 0.5 + time * 1.5);
+                        float wave2 = sin(pos.x * 0.8 - time * 1.5) * sin(pos.y * 0.8 + time * 2.0);
+                        float wave3 = cos(pos.x * 1.2 + time * 1.0) * cos(pos.y * 1.2 - time * 1.0);
+                        
+                        // Combine waves with emphasis in center
+                        float distance = length(pos.xy);
+                        float centerPulse = sin(distance * 2.0 - time * 3.0) * exp(-distance * 0.3);
+                        
+                        pos.z = (wave1 + wave2 * 0.5 + wave3 * 0.3) * 0.8 + centerPulse * 2.0;
+                        
+                        vElevation = pos.z;
+                        
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+                    }
+                `,
+                fragmentShader: `
+                    uniform vec3 color1;
+                    uniform vec3 color2;
+                    varying float vElevation;
+                    varying vec3 vPosition;
+                    
+                    void main() {
+                        // Create gradient based on elevation
+                        float mixStrength = (vElevation + 2.0) / 4.0;
+                        vec3 color = mix(color1, color2, mixStrength);
+                        
+                        // Add glow effect
+                        float glow = pow(mixStrength, 2.0);
+                        color += color2 * glow * 0.5;
+                        
+                        // Add distance fade
+                        float dist = length(vPosition.xy);
+                        float alpha = 1.0 - smoothstep(5.0, 10.0, dist);
+                        
+                        gl_FragColor = vec4(color, alpha);
+                    }
+                `,
+                transparent: true,
+                side: THREE.DoubleSide,
+                wireframe: false
+            });
+            
+            const waveMesh = new THREE.Mesh(waveGeometry, waveMaterial);
+            waveMesh.rotation.x = -Math.PI / 2;
+            waveMesh.position.y = -1;
+            scene.add(waveMesh);
+
+            // Create wireframe overlay
+            const wireframeGeometry = new THREE.PlaneGeometry(20, 20, 64, 64);
+            const wireframeMaterial = new THREE.MeshBasicMaterial({
+                color: 0x7fff00,
+                wireframe: true,
+                transparent: true,
+                opacity: 0.15
+            });
+            const wireframeMesh = new THREE.Mesh(wireframeGeometry, wireframeMaterial);
+            wireframeMesh.rotation.x = -Math.PI / 2;
+            wireframeMesh.position.y = -0.95;
+            scene.add(wireframeMesh);
+
+            // Particle system for atmosphere
+            const particleCount = 3000;
+            const particlesGeometry = new THREE.BufferGeometry();
+            const particlePositions = new Float32Array(particleCount * 3);
+            const particleSpeeds = new Float32Array(particleCount);
+            
+            for (let i = 0; i < particleCount; i++) {
+                particlePositions[i * 3] = (Math.random() - 0.5) * 30;
+                particlePositions[i * 3 + 1] = Math.random() * 10 - 2;
+                particlePositions[i * 3 + 2] = (Math.random() - 0.5) * 30;
+                particleSpeeds[i] = Math.random() * 0.02 + 0.005;
+            }
+            
+            particlesGeometry.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
+            
+            const particlesMaterial = new THREE.PointsMaterial({
+                color: 0x7fff00,
+                size: 0.05,
+                transparent: true,
+                opacity: 0.6,
+                blending: THREE.AdditiveBlending
+            });
+            
+            const particleSystem = new THREE.Points(particlesGeometry, particlesMaterial);
+            scene.add(particleSystem);
+
+            // Add central glow spike
+            const spikeGeometry = new THREE.ConeGeometry(0.3, 6, 32);
+            const spikeMaterial = new THREE.MeshBasicMaterial({
+                color: 0x7fff00,
+                transparent: true,
+                opacity: 0.8
+            });
+            const spike = new THREE.Mesh(spikeGeometry, spikeMaterial);
+            spike.position.y = 2;
+            scene.add(spike);
+
+            // Add point light for glow
+            const pointLight = new THREE.PointLight(0x7fff00, 2, 10);
+            pointLight.position.set(0, 2, 0);
+            scene.add(pointLight);
+
+            // Add ambient light
+            const ambientLight = new THREE.AmbientLight(0x003300, 0.5);
+            scene.add(ambientLight);
+
+            // Animation
+            let time = 0;
+            
+            function animate() {
+                requestAnimationFrame(animate);
+                
+                time += 0.01;
+                
+                // Update wave shader
+                waveMaterial.uniforms.time.value = time;
+                
+                // Animate wireframe
+                const wireframePositions = wireframeGeometry.attributes.position.array;
+                for (let i = 0; i < wireframePositions.length; i += 3) {
+                    const x = wireframePositions[i];
+                    const y = wireframePositions[i + 1];
+                    
+                    const wave1 = Math.sin(x * 0.5 + time * 2.0) * Math.cos(y * 0.5 + time * 1.5);
+                    const wave2 = Math.sin(x * 0.8 - time * 1.5) * Math.sin(y * 0.8 + time * 2.0);
+                    const wave3 = Math.cos(x * 1.2 + time * 1.0) * Math.cos(y * 1.2 - time * 1.0);
+                    
+                    const distance = Math.sqrt(x * x + y * y);
+                    const centerPulse = Math.sin(distance * 2.0 - time * 3.0) * Math.exp(-distance * 0.3);
+                    
+                    wireframePositions[i + 2] = (wave1 + wave2 * 0.5 + wave3 * 0.3) * 0.8 + centerPulse * 2.0;
+                }
+                wireframeGeometry.attributes.position.needsUpdate = true;
+                
+                // Animate particles
+                const positions = particlesGeometry.attributes.position.array;
+                for (let i = 0; i < particleCount; i++) {
+                    positions[i * 3 + 1] += particleSpeeds[i];
+                    
+                    if (positions[i * 3 + 1] > 8) {
+                        positions[i * 3 + 1] = -2;
+                        positions[i * 3] = (Math.random() - 0.5) * 30;
+                        positions[i * 3 + 2] = (Math.random() - 0.5) * 30;
+                    }
+                }
+                particlesGeometry.attributes.position.needsUpdate = true;
+                
+                // Animate spike
+                spike.scale.y = 1 + Math.sin(time * 3) * 0.2;
+                spike.material.opacity = 0.6 + Math.sin(time * 2) * 0.2;
+                
+                // Pulse the light
+                pointLight.intensity = 2 + Math.sin(time * 2) * 0.5;
+                
+                // Gentle camera movement
+                camera.position.x = Math.sin(time * 0.2) * 0.5;
+                camera.position.z = 5 + Math.cos(time * 0.15) * 0.3;
+                camera.lookAt(0, 0, 0);
+                
+                renderer.render(scene, camera);
+            }
+            
+            // Handle window resize
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+            
+            animate();
+        }
+        
+        // Initialize the 3D scene
+        initThreeJS();
+        
+        // Fetch and display forecast data
+        async function fetchForecast() {
+            const container = document.getElementById('forecast-data');
+            
+            try {
+                const response = await fetch('http://127.0.0.1:8000/forecast/');
+                if (!response.ok) {
+                    throw new Error('Failed to fetch forecast data');
+                }
+                const data = await response.json();
+                displayForecast(data);
+            } catch (error) {
+                console.error('Error fetching forecast:', error);
+                container.innerHTML = `
+                    <div class="error" style="grid-column: 1 / -1;">
+                        <h3>Error Loading Data</h3>
+                        <p>Failed to load air quality data. Please ensure the backend server is running and try again.</p>
+                        <p><small>${error.message}</small></p>
+                        <button onclick="fetchForecast()" style="margin-top: 1rem; padding: 0.5rem 1rem; background: #7fff00; border: none; border-radius: 4px; color: #000; cursor: pointer; font-weight: 600;">
+                            Retry
+                        </button>
+                    </div>
+                `;
+            }
+        }
+        
+        function displayForecast(data) {
+            const container = document.getElementById('forecast-data');
+            
+            // If data is an array, take the first 4 items, otherwise create an array with the single data point
+            const forecasts = Array.isArray(data) ? data.slice(0, 4) : [data];
+            
+            container.innerHTML = forecasts.map((item, index) => {
+                const date = new Date(item.datetime);
+                const formattedDate = date.toLocaleString('en-US', {
+                    weekday: 'long',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+                
+                // Get AQI category and health implications
+                const categoryInfo = getAqiCategoryInfo(item.aqi);
+                
+                return `
+                    <div class="card fade-in" style="animation-delay: ${index * 0.2}s">
+                        <h2>${index === 0 ? 'Current' : 'Forecast'}</h2>
+                        <div class="data-item">
+                            <div class="data-label">
+                                <i class="fas fa-clock" style="margin-right: 8px;"></i>
+                                ${formattedDate}
+                            </div>
+                        </div>
+                        
+                        <div class="data-item">
+                            <div class="data-label">PM2.5 Concentration</div>
+                            <div class="data-value">
+                                ${parseFloat(item.pm25).toFixed(1)} <span style="font-size: 1rem; opacity: 0.8;">µg/m³</span>
+                            </div>
+                        </div>
+                        
+                        <div class="data-item">
+                            <div class="data-label">Air Quality Index</div>
+                            <div class="data-value">
+                                ${Math.round(item.aqi)}
+                                <span class="aqi-category ${categoryInfo.class}" style="margin-left: 10px;">
+                                    ${categoryInfo.label}
+                                </span>
+                            </div>
+                        </div>
+                        
+                        <div class="data-item">
+                            <div class="data-label">Health Implications</div>
+                            <p style="font-size: 0.9rem; opacity: 0.9; line-height: 1.5;">
+                                ${categoryInfo.description}
+                            </p>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            // Animate cards with GSAP
+            gsap.from('.card', {
+                y: 50,
+                opacity: 0,
+                stagger: 0.1,
+                duration: 0.8,
+                ease: 'power3.out'
+            });
+        }
+        
+        function getAqiCategoryInfo(aqi) {
+            if (aqi <= 50) {
+                return {
+                    class: 'good',
+                    label: 'Good',
+                    description: 'Air quality is satisfactory, and air pollution poses little or no risk.'
+                };
+            } else if (aqi <= 100) {
+                return {
+                    class: 'moderate',
+                    label: 'Moderate',
+                    description: 'Air quality is acceptable. However, there may be a risk for some people, particularly those who are unusually sensitive to air pollution.'
+                };
+            } else if (aqi <= 150) {
+                return {
+                    class: 'poor',
+                    label: 'Unhealthy for Sensitive Groups',
+                    description: 'Members of sensitive groups may experience health effects. The general public is less likely to be affected.'
+                };
+            } else if (aqi <= 200) {
+                return {
+                    class: 'very-poor',
+                    label: 'Unhealthy',
+                    description: 'Some members of the general public may experience health effects; members of sensitive groups may experience more serious health effects.'
+                };
+            } else if (aqi <= 300) {
+                return {
+                    class: 'severe',
+                    label: 'Very Unhealthy',
+                    description: 'Health alert: The risk of health effects is increased for everyone.'
+                };
+            } else {
+                return {
+                    class: 'severe',
+                    label: 'Hazardous',
+                    description: 'Health warning of emergency conditions: everyone is more likely to be affected.'
+                };
+            }
+        }
+        
+        // Initialize everything when the DOM is loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            // Add loading animation
+            const loading = document.querySelector('.loading');
+            const dots = ['.', '..', '...'];
+            let dotIndex = 0;
+            
+            const loadingInterval = setInterval(() => {
+                loading.textContent = `Loading air quality data${dots[dotIndex]}`;
+                dotIndex = (dotIndex + 1) % dots.length;
+            }, 500);
+            
+            // Fetch data after a short delay to allow animations to start
+            setTimeout(() => {
+                fetchForecast().then(() => {
+                    clearInterval(loadingInterval);
+                });
+            }, 1500);
+            
+            // Add parallax effect to cards on mousemove
+            const cards = document.querySelectorAll('.card');
+            document.addEventListener('mousemove', (e) => {
+                const xAxis = (window.innerWidth / 2 - e.pageX) / 25;
+                const yAxis = (window.innerHeight / 2 - e.pageY) / 25;
+                
+                cards.forEach(card => {
+                    card.style.transform = `rotateY(${xAxis}deg) rotateX(${yAxis}deg)`;
+                });
+            });
+            
+            // Reset transform when mouse leaves the dashboard
+            document.querySelector('.dashboard').addEventListener('mouseleave', () => {
+                cards.forEach(card => {
+                    card.style.transform = 'rotateY(0) rotateX(0)';
+                });
+            });
+        });
+    </script>
+</body>
+</html>

@@ -1,16 +1,26 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.routes.forecast import router as forecast_router
 from app.routes.alerts import router as alerts_router
 from app.routes.trends import router as trends_router
 from app.routes.summaries import router as summaries_router
 from app.routes.metadata import router as metadata_router
-from app.routes.health_advisory import router as health_advisory_router 
+from app.routes.health_advisory import router as health_advisory_router
 
 app = FastAPI(
     title="PM2.5 & AQI Forecast Backend",
     description="Forecasting, alerts, trends, summaries & health advisories",
     version="1.0.0"
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
 )
 
 @app.get("/")
